@@ -1,0 +1,57 @@
+{
+  "name": "jotai-statewatch",
+  "version": "1.0.1",
+  "description": "Lightweight generic atom watcher utilities for Jotai store",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "peerDependencies": {
+    "jotai": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.3",
+    "jest": "^29.6.0",
+    "jotai": "^2.12.5",
+    "ts-jest": "^29.1.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "nano-mutex": "^1.0.1"
+  },
+  "keywords": [
+    "jotai",
+    "state management",
+    "watch",
+    "watcher",
+    "observable"
+  ],
+  "author": "Goban Source",
+  "homepage": "https://gobansource.com/opensource/jotai-statewatch",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gobansource/jotai-statewatch"
+  },
+  "bugs": {
+    "url": "https://github.com/gobansource/jotai-statewatch/issues"
+  }
+}
