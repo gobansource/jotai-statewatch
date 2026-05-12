@@ -14,9 +14,9 @@ import { createMutex } from "nano-mutex";
  */
 export const createIntervalCallback = <
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 >(
-  options: IntervalCallbackOptions<M, KS>
+  options: IntervalCallbackOptions<M, KS>,
 ): IntervalCallbackResult<M, KS> => {
   let interval: NodeJS.Timeout | null = null;
 
@@ -28,34 +28,41 @@ export const createIntervalCallback = <
     try {
       options.logger.debug("Interval callback executed");
 
-      if (await options.condition(events)) {
-        // Clear any existing interval first
+      const conditionResult = await options.condition(events);
+
+      if (conditionResult) {
+        if (options.whenTrue) {
+          try {
+            await options.whenTrue();
+          } catch (err) {
+            options.logger.error("Error in whenTrue", err);
+          }
+        }
+
+        // Clear and restart interval to avoid duplicates
+        if (interval) {
+          clearInterval(interval);
+        }
+        interval = setInterval(async () => {
+          try {
+            await options.onTick();
+          } catch (err) {
+            options.logger.error("Error executing onTick", err);
+          }
+        }, options.intervalMs);
+      } else {
         if (interval) {
           clearInterval(interval);
           interval = null;
         }
 
-        if (options.runOnSetup !== false) {
-          // Run the action immediately
+        if (options.whenFalse) {
           try {
-            await options.action();
+            await options.whenFalse();
           } catch (err) {
-            options.logger.error("Error executing interval action", err);
+            options.logger.error("Error in whenFalse", err);
           }
         }
-        // Schedule future ticks
-        interval = setInterval(async () => {
-          try {
-            await options.action();
-          } catch (err) {
-            options.logger.error("Error executing interval action", err);
-          }
-        }, options.intervalMs);
-      } else if (interval) {
-        // Condition failed – ensure any existing interval is cleared
-        options.logger.debug("Condition failed - clearing interval");
-        clearInterval(interval);
-        interval = null;
       }
     } finally {
       release();

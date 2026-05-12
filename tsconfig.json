@@ -6,7 +6,7 @@
     "strict": true,
     "moduleResolution": "node",
     "target": "ES2020",
-    "module": "ESNext",
+    "module": "commonjs",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

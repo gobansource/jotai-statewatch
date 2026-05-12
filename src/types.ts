@@ -26,25 +26,25 @@ export type WatchersMap = Record<string, SingleAtomWatcher<any>>;
  */
 export type IntervalCallbackOptions<
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 > = {
   /** Function deciding whether the interval should be active. */
   condition: (events: EventsFor<M, KS>) => Promise<boolean>;
-  /**
-   * Action executed immediately (after condition passes) and on each interval tick.
-   */
-  action: () => Promise<void>;
+  /** Fires every evaluation where condition is true, before (re)starting the interval. */
+  whenTrue?: () => Promise<void>;
+  /** Fires on each interval tick while condition is true. */
+  onTick: () => Promise<void>;
+  /** Fires every evaluation where condition is false, after clearing the interval (if any). */
+  whenFalse?: () => Promise<void>;
   /** Interval duration in milliseconds */
   intervalMs: number;
   /** Logger implementation */
   logger: LoggerLike;
-  /** Whether to run the action immediately on interval setup, default is true, only specify this if you want to delay the first run */
-  runOnSetup?: boolean;
 };
 
 export type IntervalCallbackResult<
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 > = {
   /** The callback wired into an atom watcher */
   callback: (events: EventsFor<M, KS>) => Promise<void>;
@@ -68,12 +68,12 @@ export interface WatcherEvent<T = unknown> {
 
 /** Callback type used by consumers of the watcher aggregation layer */
 export type AtomWatcherCallback = (
-  events: WatcherEvent[]
+  events: WatcherEvent[],
 ) => void | Promise<void>;
 
 /** Internal callback type for a single-atom watcher */
 export type SingleAtomCallback<T = unknown> = (
-  event: WatcherEvent<T>
+  event: WatcherEvent<T>,
 ) => void | Promise<void>;
 
 /**
@@ -95,9 +95,8 @@ export interface SingleAtomWatcher<T> {
 }
 
 // Helper type: extracts the runtime value type from a SingleAtomWatcher
-export type AtomValueFromWatcher<W> = W extends SingleAtomWatcher<infer V>
-  ? V
-  : never;
+export type AtomValueFromWatcher<W> =
+  W extends SingleAtomWatcher<infer V> ? V : never;
 
 /**
  * Maps a tuple/array of watcher IDs to an object shape whose keys are those IDs
@@ -108,7 +107,7 @@ export type AtomValueFromWatcher<W> = W extends SingleAtomWatcher<infer V>
  */
 export type EventsFor<
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 > = {
   [K in KS[number]]: WatcherEvent<AtomValueFromWatcher<M[K]>>;
 };
@@ -116,13 +115,13 @@ export type EventsFor<
 /** Convenience alias for the events object passed to callbacks */
 export type WatcherEvents<
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 > = EventsFor<M, KS>;
 
 /** The strongly typed callback signature */
 export type WatcherCallback<
   M extends WatchersMap,
-  KS extends readonly (keyof M)[]
+  KS extends readonly (keyof M)[],
 > = (events: WatcherEvents<M, KS>) => void | Promise<void>;
 
 /** Generic callback configuration. The `watchers` array decides both which
@@ -131,7 +130,7 @@ export type WatcherCallback<
  */
 export type WatcherCallbackConfig<
   M extends WatchersMap = WatchersMap,
-  KS extends readonly (keyof M)[] = (keyof M)[]
+  KS extends readonly (keyof M)[] = (keyof M)[],
 > = {
   watchers: ReadonlyArray<keyof M>;
   callback: (events: EventsFor<M, KS>) => void | Promise<void>;

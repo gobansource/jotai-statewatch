@@ -44,119 +44,178 @@ describe("createIntervalCallback", () => {
   type M = WatchersMap; // not used directly, but keeps generics readable
 
   const make = (
-    overrides: Partial<IntervalCallbackOptions<M, typeof ids>> = {}
+    overrides: Partial<IntervalCallbackOptions<M, typeof ids>> = {},
   ) => {
-    const action = jest.fn(async () => {
+    const onTick = jest.fn(async () => {
+      /* no-op */
+    });
+    const whenTrue = jest.fn(async () => {
+      /* no-op */
+    });
+    const whenFalse = jest.fn(async () => {
       /* no-op */
     });
     const condition = jest.fn(async () => true);
 
     const options: IntervalCallbackOptions<M, typeof ids> = {
       condition: overrides.condition ?? condition,
-      action: overrides.action ?? action,
+      onTick: overrides.onTick ?? onTick,
+      whenTrue: overrides.whenTrue ?? whenTrue,
+      whenFalse: overrides.whenFalse ?? whenFalse,
       intervalMs: overrides.intervalMs ?? 5000,
       logger: loggerStub,
-      runOnSetup: overrides.runOnSetup,
     } as any; // generics around WatchersMap are not important here
 
     const result = createIntervalCallback(options);
-    return { ...result, options, action, condition } as const;
+    return {
+      ...result,
+      options,
+      onTick,
+      whenTrue,
+      whenFalse,
+      condition,
+    } as const;
   };
 
-  test("runs action immediately on setup when condition passes (default runOnSetup=true)", async () => {
-    const { callback, action, condition } = make();
+  test("calls whenTrue on first evaluation where condition is true", async () => {
+    const { callback, whenTrue, onTick } = make();
     const events = buildEvents(ids) as any;
     await callback(events);
 
-    expect(condition).toHaveBeenCalledTimes(1);
-    expect(action).toHaveBeenCalledTimes(1); // immediate run
+    expect(whenTrue).toHaveBeenCalledTimes(1);
+    expect(onTick).not.toHaveBeenCalled(); // no immediate tick
 
     // advance time to trigger one interval tick
     jest.advanceTimersByTime(5000);
-    expect(action).toHaveBeenCalledTimes(2);
+    expect(onTick).toHaveBeenCalledTimes(1);
   });
 
-  test("does not run immediate action when runOnSetup=false but schedules future ticks", async () => {
-    const { callback, action } = make({ runOnSetup: false });
+  test("calls whenTrue on every evaluation where condition is true", async () => {
+    const { callback, whenTrue } = make();
+    const events = buildEvents(ids) as any;
+    await callback(events);
+    await callback(events);
+
+    expect(whenTrue).toHaveBeenCalledTimes(2);
+  });
+
+  test("calls whenFalse when condition becomes false and clears interval", async () => {
+    const condition = jest
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const { callback, whenFalse, onTick } = make({ condition });
+    const events = buildEvents(ids) as any;
+    await callback(events); // true
+    jest.advanceTimersByTime(5000);
+    expect(onTick).toHaveBeenCalledTimes(1);
+
+    await callback(events); // false
+    expect(whenFalse).toHaveBeenCalledTimes(1);
+
+    // no more ticks
+    const ticksAfterClear = onTick.mock.calls.length;
+    jest.advanceTimersByTime(10000);
+    expect(onTick).toHaveBeenCalledTimes(ticksAfterClear);
+  });
+
+  test("calls whenFalse on every evaluation where condition is false", async () => {
+    const condition = jest.fn().mockResolvedValue(false);
+    const { callback, whenFalse } = make({ condition });
+    const events = buildEvents(ids) as any;
+    await callback(events);
+    await callback(events);
+
+    expect(whenFalse).toHaveBeenCalledTimes(2);
+  });
+
+  test("ticks on interval while condition stays true", async () => {
+    const { callback, onTick } = make();
     const events = buildEvents(ids) as any;
     await callback(events);
 
-    expect(action).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(5000);
-    expect(action).toHaveBeenCalledTimes(1); // first tick only after interval
+    jest.advanceTimersByTime(15000); // 3 ticks
+    expect(onTick).toHaveBeenCalledTimes(3);
   });
 
-  test("clears existing interval when condition becomes false", async () => {
-    const condition = jest
-      .fn()
-      // first invocation true -> sets interval
-      .mockResolvedValueOnce(true)
-      // second invocation false -> clears interval
-      .mockResolvedValueOnce(false);
-
-    const { callback, action } = make({ condition });
-    const events = buildEvents(ids) as any;
-    await callback(events); // sets up interval + immediate action
-    expect(action).toHaveBeenCalledTimes(1);
-
-    // Trigger some ticks then toggle condition off
-    jest.advanceTimersByTime(10000); // 2 ticks
-    expect(action).toHaveBeenCalledTimes(3);
-
-    await callback(events); // condition now false -> interval cleared
-    const actionCallsAfterClear = action.mock.calls.length;
-
-    jest.advanceTimersByTime(10000); // would have produced 2 more ticks if active
-    expect(action).toHaveBeenCalledTimes(actionCallsAfterClear); // no new calls
-  });
-
-  test("re-initialises (restarts) interval without duplicating when condition stays true", async () => {
-    const { callback, action, condition } = make();
+  test("restarts interval without duplicating when condition stays true across callbacks", async () => {
+    const { callback, onTick } = make();
     const events = buildEvents(ids) as any;
 
     await callback(events); // start interval
     jest.advanceTimersByTime(5000);
-    expect(action).toHaveBeenCalledTimes(2);
+    expect(onTick).toHaveBeenCalledTimes(1);
 
-    // Calling callback again while condition true should clear & re-create one interval only
-    await callback(events);
+    await callback(events); // condition still true — restart interval
     jest.advanceTimersByTime(5000);
-
-    // Expected calls: 1 immediate + 1 first tick + 1 immediate after restart + 1 tick after restart
-    expect(action).toHaveBeenCalledTimes(4);
-    expect(condition).toHaveBeenCalledTimes(2);
+    expect(onTick).toHaveBeenCalledTimes(2); // one more tick, not duplicated
   });
 
-  test("logs error but continues ticking when action rejects", async () => {
-    const failingAction = jest.fn(async () => {
+  test("logs error but continues ticking when onTick rejects", async () => {
+    const failingTick = jest.fn(async () => {
       throw new Error("boom");
     });
-    const { callback } = make({ action: failingAction });
+    const { callback } = make({ onTick: failingTick });
     const events = buildEvents(ids) as any;
 
-    await callback(events); // immediate attempt -> logs error
+    await callback(events);
+
+    jest.advanceTimersByTime(5000);
+    // Flush the async onTick rejection handler
+    await Promise.resolve();
+    expect(failingTick).toHaveBeenCalledTimes(1);
     expect(loggerStub.error).toHaveBeenCalledWith(
-      expect.stringContaining("Error executing interval action"),
-      expect.any(Error)
+      expect.stringContaining("Error executing onTick"),
+      expect.any(Error),
     );
 
     // Next tick should also attempt again
     jest.advanceTimersByTime(5000);
-    expect(failingAction).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+    expect(failingTick).toHaveBeenCalledTimes(2);
   });
 
   test("cleanup stops further ticks", async () => {
-    const { callback, cleanup, action } = make();
+    const { callback, cleanup, onTick } = make();
     const events = buildEvents(ids) as any;
     await callback(events);
 
     jest.advanceTimersByTime(5000); // one tick
-    expect(action).toHaveBeenCalledTimes(2);
+    expect(onTick).toHaveBeenCalledTimes(1);
 
     cleanup(); // clear interval
-    const callsAtCleanup = action.mock.calls.length;
+    const callsAtCleanup = onTick.mock.calls.length;
 
     jest.advanceTimersByTime(10000);
-    expect(action).toHaveBeenCalledTimes(callsAtCleanup); // no new calls
+    expect(onTick).toHaveBeenCalledTimes(callsAtCleanup); // no new calls
+  });
+
+  test("full lifecycle: true → ticks → false → true again", async () => {
+    const condition = jest
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const { callback, whenTrue, whenFalse, onTick } = make({
+      condition,
+    });
+    const events = buildEvents(ids) as any;
+
+    await callback(events); // true
+    expect(whenTrue).toHaveBeenCalledTimes(1);
+
+    jest.advanceTimersByTime(5000);
+    expect(onTick).toHaveBeenCalledTimes(1);
+
+    await callback(events); // false
+    expect(whenFalse).toHaveBeenCalledTimes(1);
+
+    await callback(events); // true again
+    expect(whenTrue).toHaveBeenCalledTimes(2);
+
+    jest.advanceTimersByTime(5000);
+    expect(onTick).toHaveBeenCalledTimes(2);
   });
 });
