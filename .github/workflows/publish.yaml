@@ -97,7 +97,13 @@ jobs:
           echo "📦 Will publish jotai-statewatch@${NEW_VERSION} with tag: $([[ '${{ inputs.release_type }}' == 'stable' ]] && echo 'latest' || echo '${{ inputs.release_type }}')"
 
       - name: Set version in package.json
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if [[ "$CURRENT" != "${{ steps.version.outputs.version }}" ]]; then
+            npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+          else
+            echo "Version already set to $CURRENT, skipping"
+          fi
 
       - name: Production build
         run: npm run build
