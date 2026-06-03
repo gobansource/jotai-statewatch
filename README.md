@@ -1,5 +1,9 @@
 # jotai-statewatch
 
+[![npm](https://img.shields.io/npm/v/jotai-statewatch.svg)](https://www.npmjs.com/package/jotai-statewatch)
+
+**npm:** [jotai-statewatch](https://www.npmjs.com/package/jotai-statewatch)
+
 Lightweight, type‑safe watcher + callback orchestration utilities for [Jotai](https://github.com/pmndrs/jotai) stores. It helps you declaratively wire side‑effects to atom state transitions (including multi‑atom fan‑in conditions, debounced reactions, periodic intervals gated by state, and lifecycle teardown) without scattering ad‑hoc `useEffect` logic across your app.
 
 > ESM‑only. Requires Node >=16 (or a modern bundler / React Native Metro). Ships pure, tree‑shakable code + TypeScript declarations.
@@ -348,6 +352,10 @@ statewatch/
 Please keep changes small & focused. Add tests for new behavior.
 
 ---
+
+## Used By
+
+- [PushToDisplay](https://pushtodisplay.com) — an API-first real-time display board platform that pushes content to any screen via REST API, CLI, or MCP server. Uses jotai-statewatch to orchestrate all reactive state and side-effect logic in its React Native app, replacing `useEffect` with deterministic watcher callbacks.
 
 ## 📝 License
 
